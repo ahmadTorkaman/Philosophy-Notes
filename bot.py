@@ -41,6 +41,7 @@ class PhilosophyBot:
         self.app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
         self.user_manager = UserManager()
         self.ai_analyzer = GeminiAnalyzer()
+        self.scheduler = None  # Will be initialized after bot starts
         self._setup_handlers()
 
     def _setup_handlers(self):
@@ -56,6 +57,9 @@ class PhilosophyBot:
         self.app.add_handler(CommandHandler("stats", self.cmd_stats))
         self.app.add_handler(CommandHandler("sync", self.cmd_sync))
         self.app.add_handler(CommandHandler("vault", self.cmd_vault))
+        self.app.add_handler(CommandHandler("settings", self.cmd_settings))
+        self.app.add_handler(CommandHandler("set_summary_time", self.cmd_set_summary_time))
+        self.app.add_handler(CommandHandler("timezone", self.cmd_set_timezone))
 
         # Message handler (for notes)
         self.app.add_handler(MessageHandler(
@@ -306,11 +310,142 @@ class PhilosophyBot:
                 "Sorry, there was an error creating your vault. Please try again later."
             )
 
+    async def cmd_settings(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /settings command - show user settings"""
+        user_id = update.effective_user.id
+        user_info = self.user_manager.get_user_info(user_id)
+
+        if not user_info:
+            await update.message.reply_text("Please use /start first!")
+            return
+
+        timezone = user_info.get('timezone', 'Asia/Tehran')
+        summary_time = user_info.get('summary_time', '23:00')
+
+        message = f"""⚙️ *Your Settings*
+
+🕐 *Summary Time:* {summary_time} ({timezone})
+🌍 *Timezone:* {timezone}
+
+*Change Settings:*
+• /set_summary_time HH:MM - Set daily summary time (e.g., /set_summary_time 20:00)
+• /timezone TIMEZONE - Set your timezone (e.g., /timezone America/New_York)
+
+*Common Timezones:*
+• Asia/Tehran
+• America/New_York
+• Europe/London
+• Asia/Tokyo
+• Australia/Sydney
+
+[Full list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)
+"""
+
+        await update.message.reply_text(message, parse_mode='Markdown')
+
+    async def cmd_set_summary_time(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /set_summary_time command"""
+        user_id = update.effective_user.id
+
+        if not context.args:
+            await update.message.reply_text(
+                "⏰ Usage: `/set_summary_time HH:MM`\n\n"
+                "Example: `/set_summary_time 20:00` for 8:00 PM\n\n"
+                "Current time: Use /settings to see",
+                parse_mode='Markdown'
+            )
+            return
+
+        time_str = context.args[0]
+
+        # Validate time format
+        try:
+            hour, minute = map(int, time_str.split(':'))
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                raise ValueError("Invalid time range")
+
+            # Format as HH:MM
+            formatted_time = f"{hour:02d}:{minute:02d}"
+
+        except (ValueError, IndexError):
+            await update.message.reply_text(
+                "❌ Invalid time format. Use HH:MM (24-hour format)\n\n"
+                "Examples:\n"
+                "• /set_summary_time 20:00 (8 PM)\n"
+                "• /set_summary_time 23:30 (11:30 PM)\n"
+                "• /set_summary_time 07:00 (7 AM)"
+            )
+            return
+
+        # Update database
+        self.user_manager.update_user_summary_time(user_id, formatted_time)
+
+        await update.message.reply_text(
+            f"✓ Daily summary time updated to *{formatted_time}*\n\n"
+            f"You'll receive your AI-generated daily reflection every day at this time.\n\n"
+            f"Use /settings to see all your settings.",
+            parse_mode='Markdown'
+        )
+
+    async def cmd_set_timezone(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /timezone command"""
+        user_id = update.effective_user.id
+
+        if not context.args:
+            await update.message.reply_text(
+                "🌍 Usage: `/timezone TIMEZONE_NAME`\n\n"
+                "Examples:\n"
+                "• /timezone Asia/Tehran\n"
+                "• /timezone America/New_York\n"
+                "• /timezone Europe/London\n\n"
+                "See all timezones: [Wikipedia](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)",
+                parse_mode='Markdown'
+            )
+            return
+
+        timezone_str = context.args[0]
+
+        # Validate timezone
+        try:
+            import pytz
+            tz = pytz.timezone(timezone_str)
+        except pytz.exceptions.UnknownTimeZoneError:
+            await update.message.reply_text(
+                f"❌ Unknown timezone: `{timezone_str}`\n\n"
+                f"Please use a valid timezone name like:\n"
+                f"• Asia/Tehran\n"
+                f"• America/New_York\n"
+                f"• Europe/London\n\n"
+                f"[Full list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)",
+                parse_mode='Markdown'
+            )
+            return
+
+        # Update database
+        self.user_manager.update_user_timezone(user_id, timezone_str)
+
+        from datetime import datetime
+        current_time = datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')
+
+        await update.message.reply_text(
+            f"✓ Timezone updated to *{timezone_str}*\n\n"
+            f"Current time in your timezone:\n"
+            f"`{current_time}`\n\n"
+            f"Your daily summaries will be scheduled according to this timezone.\n\n"
+            f"Use /settings to see all your settings.",
+            parse_mode='Markdown'
+        )
+
     def run(self):
         """Run the bot"""
         logger.info(f"🤖 Philosophy Bot starting...")
         logger.info(f"📡 AI Provider: {config.AI_PROVIDER.upper()}")
         logger.info(f"🗄️  Users directory: {config.USERS_DIR}")
+
+        # Start daily summary scheduler
+        from scheduler import create_scheduler
+        self.scheduler = create_scheduler(self)
+        logger.info(f"📅 Daily summaries scheduled")
 
         self.app.run_polling()
 

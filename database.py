@@ -479,12 +479,64 @@ class UserManager:
         """Get all users who need daily summaries"""
         conn = sqlite3.connect(self.users_db_path)
         cursor = conn.cursor()
-        
+
         cursor.execute("""
             SELECT telegram_id FROM users WHERE setup_completed = 1
         """)
-        
+
         users = [row[0] for row in cursor.fetchall()]
         conn.close()
-        
+
         return users
+
+    def get_all_users(self) -> List[Dict]:
+        """Get all users with full information"""
+        conn = sqlite3.connect(self.users_db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT telegram_id, username, first_name, timezone, summary_time, setup_completed
+            FROM users
+        """)
+
+        users = []
+        for row in cursor.fetchall():
+            users.append({
+                'telegram_id': row[0],
+                'username': row[1],
+                'first_name': row[2],
+                'timezone': row[3],
+                'summary_time': row[4],
+                'setup_completed': row[5]
+            })
+
+        conn.close()
+        return users
+
+    def update_user_timezone(self, telegram_id: int, timezone: str):
+        """Update user's timezone setting"""
+        conn = sqlite3.connect(self.users_db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            UPDATE users
+            SET timezone = ?
+            WHERE telegram_id = ?
+        """, (timezone, telegram_id))
+
+        conn.commit()
+        conn.close()
+
+    def update_user_summary_time(self, telegram_id: int, summary_time: str):
+        """Update user's daily summary time"""
+        conn = sqlite3.connect(self.users_db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            UPDATE users
+            SET summary_time = ?
+            WHERE telegram_id = ?
+        """, (summary_time, telegram_id))
+
+        conn.commit()
+        conn.close()
