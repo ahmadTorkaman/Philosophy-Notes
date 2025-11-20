@@ -1,8 +1,9 @@
 # Telegram Bot
 python-telegram-bot==20.7
 
-# Google Gemini AI
+# AI Providers (choose one or both)
 google-generativeai==0.3.2
+anthropic>=0.18.0
 
 # Flask for sync server
 flask==3.0.0
@@ -16,3 +17,6 @@ schedule==1.2.0
 
 # Environment variables
 python-dotenv==1.0.0
+
+# Production server
+gunicorn==21.2.0
