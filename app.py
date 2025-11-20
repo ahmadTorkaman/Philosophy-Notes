@@ -171,23 +171,32 @@ def download_vault_zip(token):
 # BOT RUNNER
 # ============================================
 
+def run_flask_server():
+    """Run Flask in background thread"""
+    port = int(os.getenv('PORT', 5000))
+    host = '0.0.0.0'
+
+    logger.info(f"✓ Starting Flask API on {host}:{port}")
+    app.run(
+        host=host,
+        port=port,
+        debug=False,
+        threaded=True,
+        use_reloader=False  # Important: disable reloader in thread
+    )
+
 def run_telegram_bot():
-    """Run Telegram bot in separate thread"""
+    """Run Telegram bot in main thread"""
     try:
-        import asyncio
         from bot import PhilosophyBot
-        logger.info("Starting Telegram Bot in background thread...")
-
-        # Create new event loop for this thread
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
+        logger.info("Starting Telegram Bot...")
         bot = PhilosophyBot()
+        logger.info("✓ Bot initialized, starting polling...")
         bot.run()
     except Exception as e:
         logger.error(f"Failed to start Telegram bot: {e}")
         logger.exception("Bot error traceback:")
-        # Don't crash the web service if bot fails
+        raise
 
 # ============================================
 # MAIN ENTRY POINT
@@ -199,12 +208,9 @@ def main():
     logger.info("Philosophy Notes Bot - Starting on Render.com")
     logger.info("=" * 60)
 
-    # Get port from environment (Render provides this)
-    port = int(os.getenv('PORT', 5000))
-    host = '0.0.0.0'
-
     # Check required environment variables
     telegram_token = os.getenv('TELEGRAM_BOT_TOKEN') or os.getenv('BOT_TOKEN')
+    gemini_key = os.getenv('GEMINI_API_KEY')
     anthropic_key = os.getenv('ANTHROPIC_API_KEY')
 
     if not telegram_token:
@@ -212,27 +218,34 @@ def main():
     else:
         logger.info("✓ Telegram bot token configured")
 
-    if not anthropic_key:
-        logger.warning("⚠️  ANTHROPIC_API_KEY not set - AI summaries will not work")
-    else:
+    if not gemini_key and not anthropic_key:
+        logger.warning("⚠️  No AI API key set - AI summaries will not work")
+        logger.warning("⚠️  Set either GEMINI_API_KEY or ANTHROPIC_API_KEY")
+    elif gemini_key:
+        logger.info("✓ Gemini API key configured")
+    elif anthropic_key:
         logger.info("✓ Anthropic API key configured")
 
-    # Start Telegram bot in background thread
-    if telegram_token:
-        bot_thread = threading.Thread(target=run_telegram_bot, daemon=True)
-        bot_thread.start()
-        logger.info("✓ Telegram bot thread started")
+    # Start Flask in background thread
+    flask_thread = threading.Thread(target=run_flask_server, daemon=True)
+    flask_thread.start()
+    logger.info("✓ Flask API thread started")
 
-    # Start Flask web server (blocking)
-    logger.info(f"✓ Starting Flask API on {host}:{port}")
+    # Give Flask a moment to start
+    import time
+    time.sleep(2)
+
     logger.info("=" * 60)
 
-    app.run(
-        host=host,
-        port=port,
-        debug=False,
-        threaded=True
-    )
+    # Run Telegram bot in main thread (needs main thread for signal handlers)
+    if telegram_token:
+        run_telegram_bot()
+    else:
+        logger.error("Cannot start bot without TELEGRAM_BOT_TOKEN")
+        # Keep Flask running even without bot
+        logger.info("Flask API will continue running...")
+        while True:
+            time.sleep(60)
 
 if __name__ == '__main__':
     main()
