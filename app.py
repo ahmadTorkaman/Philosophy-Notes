@@ -174,12 +174,19 @@ def download_vault_zip(token):
 def run_telegram_bot():
     """Run Telegram bot in separate thread"""
     try:
+        import asyncio
         from bot import PhilosophyBot
         logger.info("Starting Telegram Bot in background thread...")
+
+        # Create new event loop for this thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
         bot = PhilosophyBot()
         bot.run()
     except Exception as e:
         logger.error(f"Failed to start Telegram bot: {e}")
+        logger.exception("Bot error traceback:")
         # Don't crash the web service if bot fails
 
 # ============================================
