@@ -18,7 +18,8 @@ load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 if not TELEGRAM_BOT_TOKEN:
-    raise ValueError("TELEGRAM_BOT_TOKEN not found in environment variables. Please create a .env file.")
+    import warnings
+    warnings.warn("TELEGRAM_BOT_TOKEN not found in environment variables. Bot features will be disabled.")
 
 # ============================================
 # GEMINI API CONFIGURATION
@@ -28,7 +29,8 @@ if not TELEGRAM_BOT_TOKEN:
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not GEMINI_API_KEY:
-    raise ValueError("GEMINI_API_KEY not found in environment variables. Please add it to your .env file.")
+    import warnings
+    warnings.warn("GEMINI_API_KEY not found. Gemini AI features will be disabled.")
 
 # Gemini Model (default: gemini-1.5-pro)
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
@@ -232,5 +234,6 @@ def validate_config():
 
 
 # Validate configuration on import
-if __name__ != "__main__":
-    validate_config()
+# Disabled for Render deployment - validation happens in bot initialization
+# if __name__ != "__main__":
+#     validate_config()

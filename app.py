@@ -9,9 +9,6 @@ import logging
 import threading
 from pathlib import Path
 
-# Add Python Modules to path
-sys.path.insert(0, str(Path(__file__).parent / "Python Modules"))
-
 from flask import Flask, jsonify, send_file, request
 from flask_cors import CORS
 
